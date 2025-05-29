@@ -1,0 +1,37 @@
+# intents_config.yaml
+
+# Version of the MCP schema we are using. Helps with future compatibility.
+mcp_schema_version: "1.0"
+
+# List of all intents our MCP server will understand.
+intents:
+  - name: "GetProducts" # Unique identifier for this intent.
+    description: "Fetches a list of products from Salesforce Revenue Cloud based on user query."
+    slots: # List of pieces of information (parameters) to extract for this intent.
+      - name: "product_family" # Name of the slot.
+        type: "String" # Expected data type of the slot.
+        description: "The category or family of products the user is asking about (e.g., 'Solar panels', 'Inverters'). Optional."
+        required: false # Specifies if this slot must be filled for the intent to be valid.
+    # Example phrases that would trigger this intent. 
+    # The LLM uses these (and its general knowledge) to understand user requests.
+    # The [slot_name] syntax indicates where a slot value might appear.
+    training_phrases:
+      - "What are our products?"
+      - "Show me all products."
+      - "What [product_family] do you offer?"
+      - "Do you have [product_family]?"
+      - "Give me a list of [product_family]."
+      - "I need information about [product_family]."
+
+  - name: "UnsupportedRequest" # Intent for when the user's query is not recognized or supported.
+    description: "Used when the user's query is not recognized or is out of scope."
+    slots: [] # This intent has no slots to extract.
+    training_phrases:
+      - "What time is it?"
+      - "What's the weather like?"
+      - "Tell me a joke."
+
+# It would be good practice to also include a JSON Schema definition here or in a separate file
+# to validate the LLM's output. For this MVP, we'll rely on careful prompting and
+# Python-side checks. The modelcontextprotocol.io framework might have its own
+# mechanisms for schema definition and validation.

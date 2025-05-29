@@ -1,0 +1,9 @@
+# requirements.txt
+
+Flask                 # Web framework to build our API server
+requests              # HTTP library to make API calls to Salesforce
+python-dotenv         # Library to load environment variables from a .env file
+google-generativeai   # Google AI Python SDK for Gemini API
+PyYAML                # Library to read and parse YAML files (for intents_config.yaml)
+# modelcontextprotocol  # Placeholder for the actual modelcontextprotocol.io library if available
+# jsonschema            # Useful for validating JSON structures (optional for this MVP, but good practice)
