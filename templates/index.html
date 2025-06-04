@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="hr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Salesforce AI Gateway</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background-color: #eef2f7; color: #333; display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; padding-top: 20px;}
+        .container { background-color: #fff; padding: 30px; border-radius: 12px; box-shadow: 0 8px 16px rgba(0,0,0,0.1); width: 90%; max-width: 700px; }
+        h1 { color: #0056b3; text-align: center; margin-bottom: 25px; }
+        label { display: block; margin-bottom: 8px; font-weight: 600; color: #555; }
+        input[type="text"] { width: calc(100% - 24px); padding: 12px; margin-bottom: 20px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; box-sizing: border-box; }
+        input[type="text"]:focus { border-color: #007bff; box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25); outline: none;}
+        button { background-color: #007bff; color: white; padding: 12px 20px; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; transition: background-color 0.3s ease; display: block; width: 100%; }
+        button:hover { background-color: #0056b3; }
+        #responseAreaContainer { margin-top: 25px; }
+        h2 { color: #0056b3; margin-bottom: 10px; border-bottom: 2px solid #eee; padding-bottom: 5px;}
+        pre#responseArea { background-color: #f8f9fa; padding: 15px; border: 1px solid #dee2e6; border-radius: 6px; white-space: pre-wrap; word-wrap: break-word; font-family: 'Consolas', 'Courier New', monospace; min-height: 100px; max-height: 400px; overflow-y: auto; }
+        .loader { border: 5px solid #f0f0f0; border-top: 5px solid #007bff; border-radius: 50%; width: 25px; height: 25px; animation: spin 1s linear infinite; display: none; margin: 15px auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Salesforce AI Gateway</h1>
+        
+        <label for="queryInput">Vaš upit:</label>
+        <input type="text" id="queryInput" placeholder="Npr. Pokaži mi sve proizvode">
+        
+        <button onclick="sendQuery()">Pošalji Upit</button>
+        
+        <div class="loader" id="loader"></div>
+
+        <div id="responseAreaContainer">
+            <h2>Odgovor Sustava:</h2>
+            <pre id="responseArea">Ovdje će se prikazati odgovor...</pre>
+        </div>
+    </div>
+
+    <script>
+        async function sendQuery() {
+            const queryInput = document.getElementById('queryInput');
+            const responseArea = document.getElementById('responseArea');
+            const loader = document.getElementById('loader');
+            const userQuery = queryInput.value;
+
+            if (!userQuery.trim()) {
+                responseArea.textContent = 'Molimo unesite upit.';
+                return;
+            }
+
+            responseArea.textContent = 'Analiziram upit i dohvaćam podatke...';
+            loader.style.display = 'block';
+
+            try {
+                const response = await fetch('/mcp_gateway', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ query: userQuery }),
+                });
+
+                loader.style.display = 'none'; 
+
+                const responseText = await response.text(); // Prvo dohvati kao tekst
+                if (!response.ok) {
+                    // Pokušaj parsirati kao JSON ako je moguće, inače prikaži tekst
+                    let errorData = responseText;
+                    try {
+                        errorData = JSON.parse(responseText);
+                        errorData = JSON.stringify(errorData, null, 2);
+                    } catch (e) {
+                        // Ostavi kao tekst ako nije JSON
+                    }
+                    throw new Error(`HTTP greška! Status: ${response.status}. Odgovor: ${errorData}`);
+                }
+                
+                // Ako je odgovor OK, pretpostavi da je JSON
+                const data = JSON.parse(responseText);
+                responseArea.textContent = JSON.stringify(data, null, 2);
+            
+            } catch (error) {
+                loader.style.display = 'none';
+                console.error('Greška prilikom slanja upita:', error);
+                // Prikazujemo error.message koji sada može sadržavati i parsirani JSON odgovor servera u slučaju HTTP greške
+                responseArea.textContent = `Greška: ${error.message}`;
+            }
+        }
+
+        document.getElementById('queryInput').addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault(); 
+                sendQuery();
+            }
+        });
+    </script>
+</body>
+</html>

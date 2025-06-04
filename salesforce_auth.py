@@ -1,86 +1,65 @@
 # salesforce_auth.py
+import os
+from simple_salesforce import Salesforce, SalesforceError
+from dotenv import load_dotenv
+from urllib.parse import urlparse
 
-import requests  # For making HTTP requests to the Salesforce token endpoint.
-import os        # For accessing environment variables.
-from dotenv import load_dotenv # To load variables from the .env file.
-
-# Load environment variables from .env file into the script's environment.
 load_dotenv()
 
-# Retrieve Salesforce credentials from environment variables.
-SALESFORCE_CLIENT_ID = os.getenv("SALESFORCE_CLIENT_ID")
-SALESFORCE_CLIENT_SECRET = os.getenv("SALESFORCE_CLIENT_SECRET")
-SALESFORCE_USERNAME = os.getenv("SALESFORCE_USERNAME")
-SALESFORCE_PASSWORD = os.getenv("SALESFORCE_PASSWORD") # Should be password + security token
-SALESFORCE_DOMAIN = os.getenv("SALESFORCE_DOMAIN")     # e.g., https://login.salesforce.com
+# Salesforce Credentials from .env - primarily for Session ID
+SF_SESSION_ID = os.getenv("SALESFORCE_SESSION_ID")
+SF_DOMAIN_URL = os.getenv("SALESFORCE_DOMAIN_URL") # Expected: https://yourinstance.my.salesforce.com
 
-# A simple in-memory cache for the session data (access token and instance URL).
-# In a multi-user or stateless environment, this should be stored in a more robust cache (e.g., Redis).
-_session_data = {}
-
-def get_salesforce_session():
+def get_salesforce_client():
     """
-    Authenticates with Salesforce using the Username-Password flow and retrieves an access token.
-    Caches the session data to avoid re-authenticating on every call.
-    
-    Returns:
-        dict: A dictionary containing 'access_token' and 'instance_url' if successful, None otherwise.
+    Creates and returns a Salesforce client instance using simple-salesforce,
+    exclusively using a pre-obtained Session ID.
     """
-    global _session_data # Allow modification of the global _session_data variable.
+    print("INFO: salesforce_auth.py - Attempting Salesforce authentication using provided Session ID...")
 
-    # Check if we have a cached and valid session.
-    # A more robust check would verify token expiration.
-    if _session_data and 'access_token' in _session_data:
-        print("INFO: Using cached Salesforce session.")
-        return _session_data
+    if not SF_SESSION_ID:
+        raise ValueError("CRITICAL ERROR: SALESFORCE_SESSION_ID is not set in the .env file. This is required.")
+    if not SF_DOMAIN_URL:
+        raise ValueError("CRITICAL ERROR: SALESFORCE_DOMAIN_URL is not set in the .env file (e.g., 'https://yourinstance.my.salesforce.com'). This is required.")
 
-    print("INFO: Attempting to get new Salesforce session via Username-Password flow...")
+    parsed_url = urlparse(SF_DOMAIN_URL)
+    if not parsed_url.scheme or not parsed_url.netloc: # Provjerava je li URL ispravan
+        raise ValueError("CRITICAL ERROR: SALESFORCE_DOMAIN_URL in .env is not a valid full URL. It must include scheme (e.g., 'https://') and netloc (e.g., 'yourinstance.my.salesforce.com').")
     
-    # Construct the URL for the Salesforce token endpoint.
-    auth_url = f"{SALESFORCE_DOMAIN}/services/oauth2/token"
+    instance_url_for_session = f"{parsed_url.scheme}://{parsed_url.netloc}"
     
-    # Prepare the payload for the OAuth 2.0 Password Grant Type.
-    # This grant type sends username and password directly, which is why it's less secure for many scenarios.
-    payload = {
-        'grant_type': 'password',
-        'client_id': SALESFORCE_CLIENT_ID,
-        'client_secret': SALESFORCE_CLIENT_SECRET,
-        'username': SALESFORCE_USERNAME,
-        'password': SALESFORCE_PASSWORD
-    }
-
     try:
-        # Make the POST request to the Salesforce token endpoint.
-        response = requests.post(auth_url, data=payload)
-        # Raise an HTTPError if the HTTP request returned an unsuccessful status code (4xx or 5xx).
-        response.raise_for_status()
+        sf = Salesforce(
+            session_id=SF_SESSION_ID,
+            instance_url=instance_url_for_session
+        )
         
-        # Parse the JSON response from Salesforce.
-        auth_response_data = response.json()
+        print("INFO: salesforce_auth.py - Verifying Session ID with a limits() call...")
+        sf.limits() # This call verifies the session is active
+        print(f"INFO: salesforce_auth.py - Salesforce authentication with Session ID successful. Connected to instance: {sf.sf_instance}")
+        return sf
         
-        # Cache the access token and instance URL.
-        _session_data = {
-            'access_token': auth_response_data.get('access_token'),
-            'instance_url': auth_response_data.get('instance_url')
-        }
-        print("INFO: Salesforce session obtained successfully.")
-        return _session_data
-        
-    except requests.exceptions.RequestException as e:
-        # Handle any errors during the HTTP request (network issues, Salesforce errors).
-        print(f"ERROR: Salesforce authentication failed: {e}")
-        if response is not None:
-            # Print the response content if available, as it often contains useful error details from Salesforce.
-            print(f"ERROR: Salesforce response content: {response.text}")
-        return None
+    except SalesforceError as se:
+        error_code = getattr(se, 'code', 'N/A')
+        error_message_detail = getattr(se, 'message', 'No specific message')
+        error_content = getattr(se, 'content', 'No additional content')
+        print(f"ERROR: salesforce_auth.py - Salesforce API error during Session ID validation or client instantiation: Code: {error_code}, Message: {error_message_detail}, Content: {error_content}")
+        print("       Please ensure your SALESFORCE_SESSION_ID is current and valid, and SALESFORCE_DOMAIN_URL is correct.")
+        raise # Re-raise to be caught by app.py or the caller
+    except Exception as e:
+        print(f"ERROR: salesforce_auth.py - Unexpected error during Salesforce client initialization with Session ID: {e}")
+        raise # Re-raise
 
-# This block allows testing the authentication directly when running this file.
 if __name__ == '__main__':
-    print("INFO: Testing Salesforce authentication...")
-    session = get_salesforce_session()
-    if session:
-        # Print only a portion of the access token for brevity and security.
-        print(f"Access Token (first 20 chars): {session['access_token'][:20]}...")
-        print(f"Instance URL: {session['instance_url']}")
-    else:
-        print("ERROR: Failed to authenticate with Salesforce. Check .env settings and Salesforce Connected App.")
+    # Testni blok za direktno pokretanje ove datoteke
+    print("INFO: Testing Salesforce authentication (salesforce_auth.py - Session ID Only)...")
+    try:
+        client = get_salesforce_client()
+        if client:
+            print(f"INFO: Successfully obtained Salesforce client. Instance: {client.sf_instance}")
+            limits = client.limits() 
+            print(f"INFO: API usage (DailyApiRequests): {limits['DailyApiRequests']['Remaining']}/{limits['DailyApiRequests']['Max']}")
+            print("INFO: Salesforce authentication test using Session ID successful.")
+    except Exception as e:
+        print(f"ERROR: Salesforce authentication test failed: {e}")
+        print("       Ensure SALESFORCE_SESSION_ID and SALESFORCE_DOMAIN_URL are correctly set in your .env file and the session is active.")
